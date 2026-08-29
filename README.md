@@ -2,6 +2,8 @@
 
 Hover a workspace number in the Omarchy bar to preview that desktop as a thumbnail. The same panel can be summoned from a shortcut.
 
+![Workspace Preview](preview.png)
+
 ## Install
 
 ```sh
