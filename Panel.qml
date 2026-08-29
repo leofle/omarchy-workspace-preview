@@ -23,6 +23,7 @@ Panel {
   property bool pendingRefresh: false
   property bool layoutPollPending: false
   property string lastLayoutFingerprint: ""
+  property int jpegReadId: -1
   property int windowBorderSize: 2
   property color windowBorderColor: Color.accent
   readonly property int frameWidth: Math.max(1, root.windowBorderSize)
@@ -30,6 +31,7 @@ Panel {
   readonly property string home: Quickshell.env("HOME")
   readonly property string previewDir: Model.previewDirectory(root.home)
   readonly property string wallpaperUrl: Model.wallpaperUrl(root.home)
+  readonly property string helperScript: String(Qt.resolvedUrl("preview-helper.py")).replace(/^file:\/\//, "")
   readonly property string captureScript: String(Qt.resolvedUrl("capture-workspace-preview.sh")).replace(/^file:\/\//, "")
   readonly property int focusId: Hyprland.focusedWorkspace !== null ? Hyprland.focusedWorkspace.id : -1
   readonly property var barWindow: root.hostWidget && root.hostWidget.QsWindow ? root.hostWidget.QsWindow.window : null
@@ -103,6 +105,7 @@ Panel {
       return
     }
     layoutProc.running = false
+    layoutProc.command = ["python3", root.helperScript, "run", "1000", "1048576", "--", "hyprctl", "-j", "clients"]
     layoutProc.running = true
   }
 
@@ -130,6 +133,7 @@ Panel {
   function refreshWindowBorder() {
     if (borderOptProc.running) return
     borderOptProc.running = false
+    borderOptProc.command = ["python3", root.helperScript, "run", "1000", "16384", "--", "sh", "-c", "hyprctl -j getoption general:border_size; printf '\\n'; hyprctl -j getoption general:col.active_border"]
     borderOptProc.running = true
   }
 
@@ -150,23 +154,19 @@ Panel {
     root.captureWorkspace(root.currentWorkspaceId())
   }
 
-  function shotUrl(workspaceId) {
-    var url = Model.previewUrl(root.previewDir, workspaceId)
-    var stamp = root.captureStamps[workspaceId] || 0
-    url += "?t=" + stamp + "-" + Date.now()
-    return url
-  }
-
   function setShot(workspaceId) {
-    var next = (workspaceId > 0 && root.workspaceOccupied(workspaceId))
-      ? root.shotUrl(workspaceId)
-      : root.wallpaperUrl
-    if (root.shotSource === next) {
-      root.shotSource = ""
-      Qt.callLater(function() { if (!root.shotSource) root.shotSource = next })
+    if (!(workspaceId > 0 && root.workspaceOccupied(workspaceId))) {
+      root.shotSource = root.wallpaperUrl
       return
     }
-    root.shotSource = next
+    root.loadValidatedShot(workspaceId)
+  }
+
+  function loadValidatedShot(workspaceId) {
+    root.jpegReadId = workspaceId
+    jpegReadProc.running = false
+    jpegReadProc.command = ["python3", root.helperScript, "read", Model.previewPath(root.previewDir, workspaceId)]
+    jpegReadProc.running = true
   }
 
   function markCaptured(id) {
@@ -292,8 +292,32 @@ Panel {
   }
 
   Process {
+    id: jpegReadProc
+    command: ["python3", "-c", "raise SystemExit(1)"]
+    running: false
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var requestedId = root.jpegReadId
+        var b64 = String(text || "").replace(/\s+/g, "")
+        if (requestedId !== root.selectedWorkspaceId) return
+        if (!b64) {
+          root.shotSource = root.wallpaperUrl
+          return
+        }
+        root.shotSource = "data:image/jpeg;base64," + b64
+      }
+    }
+    onExited: function(exitCode) {
+      if (exitCode === 0) return
+      if (root.jpegReadId !== root.selectedWorkspaceId) return
+      root.shotSource = root.wallpaperUrl
+    }
+  }
+
+  Process {
     id: borderOptProc
-    command: ["sh", "-c", "hyprctl -j getoption general:border_size; printf '\\n'; hyprctl -j getoption general:col.active_border"]
+    command: ["python3", "-c", "raise SystemExit(1)"]
     running: false
     stdout: StdioCollector {
       waitForEnd: true
@@ -318,7 +342,7 @@ Panel {
 
   Process {
     id: layoutProc
-    command: ["hyprctl", "-j", "clients"]
+    command: ["python3", "-c", "raise SystemExit(1)"]
     running: false
     stdout: StdioCollector {
       waitForEnd: true
@@ -329,8 +353,12 @@ Panel {
         root.scheduleRefresh()
       }
     }
-    onExited: {
+    onExited: function(exitCode) {
       layoutProc.running = false
+      if (exitCode !== 0) {
+        root.layoutPollPending = false
+        return
+      }
       if (!root.layoutPollPending) return
       root.layoutPollPending = false
       Qt.callLater(root.pollLayout)
@@ -351,7 +379,7 @@ Panel {
         return
       }
       root.markCaptured(capturedId)
-      if (root.selectedWorkspaceId === capturedId) root.setShot(capturedId)
+      if (root.selectedWorkspaceId === capturedId) root.loadValidatedShot(capturedId)
       if (root.pendingRefresh) Qt.callLater(function() { root.captureWorkspace(root.currentWorkspaceId()) })
     }
   }
@@ -383,6 +411,8 @@ Panel {
           id: shot
           anchors.fill: parent
           source: root.shotSource
+          sourceSize.width: Math.max(1, root.previewWidth * 2)
+          sourceSize.height: Math.max(1, root.previewHeight * 2)
           fillMode: Image.PreserveAspectFit
           smooth: true
           asynchronous: false

@@ -43,6 +43,7 @@ These are already present on a normal Omarchy install:
 - Hyprland (`hyprctl`)
 - `grim` to capture the focused monitor
 - `jq` to choose that monitor
+- Python 3 for bounded capture and image validation
 
 Thumbnails are written to `~/.cache/omarchy/workspace-previews/`. No sudo or pkexec is required. The plugin does not install packages and does not change files outside its cache directory.
 
