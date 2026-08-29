@@ -133,10 +133,6 @@ BarWidget {
     active: true
     source: Qt.resolvedUrl("Panel.qml")
     visible: false
-    width: 0
-    height: 0
-    implicitWidth: 0
-    implicitHeight: 0
     onLoaded: {
       root.injectPanel()
       Qt.callLater(root.injectPanel)

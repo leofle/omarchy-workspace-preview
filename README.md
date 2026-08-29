@@ -42,7 +42,7 @@ These are already present on a normal Omarchy install:
 - `grim` to capture the focused monitor
 - `jq` to choose that monitor
 
-Thumbnails are written to `~/.cache/omarchy/workspace-previews/`. The plugin does not use `sudo` or `pkexec`, does not install packages, and does not change files outside its cache directory.
+Thumbnails are written to `~/.cache/omarchy/workspace-previews/`. No sudo or pkexec is required. The plugin does not install packages and does not change files outside its cache directory.
 
 ## Remove
 
