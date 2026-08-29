@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.bubblepaxi.workspace-preview",
+  "name": "Workspace Preview",
+  "version": "1.0.0",
+  "author": "bubblepaxi",
+  "license": "MIT",
+  "description": "Hover a workspace number to preview its thumbnail, and summon the same view from a shortcut.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Workspace Preview",
+    "description": "Hover previews and a shortcut-driven workspace thumbnail panel.",
+    "category": "Compositor",
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}
