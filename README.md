@@ -10,11 +10,13 @@ Hover a workspace number in the Omarchy bar to preview that desktop as a thumbna
 omarchy plugin add https://github.com/leofle/omarchy-workspace-preview.git --enable
 ```
 
-This plugin is a drop-in replacement for the built-in workspace numbers. After install, move it onto the bar and disable `omarchy.workspaces` if both appear:
+This plugin is a drop-in replacement for the built-in workspace numbers. Omarchy does not run install scripts, so the swap happens when the plugin is **enabled**: it takes the `omarchy.workspaces` slot on the bar. Disabling or removing this plugin puts the built-in widget back.
+
+If an older install left both sets of numbers on the bar, enable this plugin again after updating (or disable `omarchy.workspaces` once):
 
 ```sh
-omarchy bar move io.github.bubblepaxi.workspace-preview --section left
-omarchy plugin disable omarchy.workspaces
+omarchy plugin disable io.github.bubblepaxi.workspace-preview
+omarchy plugin enable io.github.bubblepaxi.workspace-preview
 ```
 
 ## Usage
@@ -53,7 +55,7 @@ Thumbnails are written to `~/.cache/omarchy/workspace-previews/`. No sudo or pke
 omarchy plugin remove io.github.bubblepaxi.workspace-preview
 ```
 
-If you disabled the built-in workspace widget, turn it back on:
+Removing an enabled copy restores `omarchy.workspaces` in the same bar slot. If the built-in numbers are still missing afterward:
 
 ```sh
 omarchy plugin enable omarchy.workspaces

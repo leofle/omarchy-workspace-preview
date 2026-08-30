@@ -2,13 +2,16 @@
   "schemaVersion": 1,
   "id": "io.github.bubblepaxi.workspace-preview",
   "name": "Workspace Preview",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": "bubblepaxi",
   "license": "MIT",
   "description": "Hover a workspace number to preview its thumbnail, and summon the same view from a shortcut.",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "BarWidget.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.workspaces"
   },
   "barWidget": {
     "displayName": "Workspace Preview",
