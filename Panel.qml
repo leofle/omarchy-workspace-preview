@@ -100,6 +100,10 @@ Panel {
   }
 
   function pollLayout() {
+    if (!root.opened) {
+      root.layoutPollPending = false
+      return
+    }
     if (layoutProc.running) {
       root.layoutPollPending = true
       return
@@ -233,15 +237,17 @@ Panel {
   }
 
   onOpenedChanged: {
-    if (root.opened) root.refreshWindowBorder()
-    else root.scheduleRefresh()
+    if (root.opened) {
+      root.refreshWindowBorder()
+      return
+    }
+    root.layoutPollPending = false
+    root.scheduleRefresh()
   }
 
   Component.onCompleted: {
     root.lastFocusId = root.currentWorkspaceId()
     root.setShot(root.selectedWorkspaceId)
-    root.pollLayout()
-    root.refreshWindowBorder()
     root.scheduleRefresh()
   }
 
@@ -285,9 +291,11 @@ Panel {
   }
 
   Timer {
+    id: layoutPollTimer
     interval: 120
-    running: true
+    running: root.opened
     repeat: true
+    triggeredOnStart: true
     onTriggered: root.pollLayout()
   }
 
@@ -361,7 +369,7 @@ Panel {
       }
       if (!root.layoutPollPending) return
       root.layoutPollPending = false
-      Qt.callLater(root.pollLayout)
+      if (root.opened) Qt.callLater(root.pollLayout)
     }
   }
 
