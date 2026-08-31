@@ -37,5 +37,21 @@ class PanelIdlePollTests(unittest.TestCase):
             self.assertNotRegex(timer, r"running:\s*true")
 
 
+class PanelOverlayCaptureTests(unittest.TestCase):
+    def test_hover_swap_does_not_recapture(self):
+        fn = block_after("function showWorkspace(")
+        self.assertIn("root.setShot(workspaceId)", fn)
+        self.assertNotIn("captureWorkspace", fn)
+
+    def test_capture_skips_while_overlay_is_on_screen(self):
+        fn = block_after("function captureWorkspace(")
+        self.assertIn("overlayOnScreen()", fn)
+        self.assertIn("if (root.overlayOnScreen()) return", fn)
+
+    def test_opening_preview_aborts_in_flight_capture(self):
+        fn = block_after("onOpenedChanged:")
+        self.assertIn("root.abortCapture()", fn)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -155,7 +155,6 @@ Panel {
     if (anchor) root.anchorItem = anchor
     root.selectedWorkspaceId = workspaceId
     root.setShot(workspaceId)
-    root.captureWorkspace(root.currentWorkspaceId())
   }
 
   function setShot(workspaceId) {
@@ -209,9 +208,21 @@ Panel {
     else root.openFromHotkey()
   }
 
+  function overlayOnScreen() {
+    return panel.visible
+  }
+
+  function abortCapture() {
+    stallTimer.stop()
+    if (captureProc.running) captureProc.running = false
+    root.captureQueued = false
+    root.capturingId = -1
+  }
+
   function captureWorkspace(id, force) {
     if (id <= 0) return
     if (!force && !root.onFocusedOutput()) return
+    if (root.overlayOnScreen()) return
     if (root.captureQueued || captureProc.running) {
       root.pendingRefresh = true
       return
@@ -239,6 +250,7 @@ Panel {
   onOpenedChanged: {
     if (root.opened) {
       root.refreshWindowBorder()
+      root.abortCapture()
       return
     }
     root.layoutPollPending = false
@@ -275,7 +287,10 @@ Panel {
     id: windowCaptureTimer
     interval: 420
     repeat: false
-    onTriggered: root.captureWorkspace(root.currentWorkspaceId())
+    onTriggered: {
+      if (root.overlayOnScreen()) return
+      root.captureWorkspace(root.currentWorkspaceId())
+    }
   }
 
   Timer {
@@ -387,7 +402,8 @@ Panel {
         return
       }
       root.markCaptured(capturedId)
-      if (root.selectedWorkspaceId === capturedId) root.loadValidatedShot(capturedId)
+      if (root.selectedWorkspaceId === capturedId && !root.overlayOnScreen())
+        root.loadValidatedShot(capturedId)
       if (root.pendingRefresh) Qt.callLater(function() { root.captureWorkspace(root.currentWorkspaceId()) })
     }
   }

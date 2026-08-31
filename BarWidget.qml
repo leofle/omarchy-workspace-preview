@@ -51,10 +51,7 @@ BarWidget {
   }
 
   function focusWorkspace(id) {
-    if (panelLoader.item) {
-      panelLoader.item.close()
-      panelLoader.item.captureCurrentWorkspace()
-    }
+    if (panelLoader.item) panelLoader.item.close()
     if (!root.bar) return
     root.bar.run("hyprctl dispatch " + Util.shellQuote("hl.dsp.focus({ workspace = \"" + id + "\" })"))
   }
