@@ -57,6 +57,35 @@ class PreviewHelperTests(unittest.TestCase):
         self.assertEqual(result.returncode, 70)
         self.assertEqual(result.stdout, b"")
 
+    def test_run_bounds_memory_while_reading_flooded_stdout(self):
+        # A child that floods stdout must not be buffered in full before the
+        # ceiling is enforced, so peak RSS has to stay near max_bytes.
+        probe = (
+            "import resource, runpy, sys;"
+            "sys.argv = ['preview-helper.py', 'run', '3000', '4096', '--',"
+            " 'yes', 'flood'];"
+            "code = 0\n"
+            "try:\n"
+            f"    runpy.run_path({str(HELPER)!r}, run_name='__main__')\n"
+            "except SystemExit as exc:\n"
+            "    code = exc.code or 0\n"
+            "sys.stderr.write('rss=%d code=%d' %"
+            " (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, code))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        report = result.stderr.decode().rsplit("rss=", 1)[-1]
+        peak_kb, _, code = report.partition(" code=")
+        self.assertEqual(int(code), 70)
+        self.assertEqual(result.stdout, b"")
+        # `yes` emits hundreds of MB/s; the pre-fix code buffered ~1GB here.
+        self.assertLess(int(peak_kb), 100 * 1024, f"peak RSS {peak_kb} KB too high")
+
     def test_run_fail_closed_on_timeout(self):
         result = run_helper(
             "run",

@@ -11,30 +11,51 @@ def block_after(marker: str) -> str:
     idx = PANEL.find(marker)
     if idx < 0:
         raise AssertionError(f"missing {marker!r}")
-    return PANEL[idx : idx + 400]
+    return PANEL[idx : idx + 900]
 
 
 class PanelIdlePollTests(unittest.TestCase):
-    def test_layout_poll_timer_runs_only_while_open(self):
-        timer = block_after("id: layoutPollTimer")
-        self.assertIn("running: root.opened", timer)
-        self.assertIn("triggeredOnStart: true", timer)
-        self.assertNotIn("running: true", timer)
+    def test_no_layout_subprocess_poll(self):
+        self.assertNotIn("layoutProc", PANEL)
+        self.assertNotIn('"hyprctl", "-j", "clients"', PANEL)
+        poll = block_after("function pollGeometry()")
+        self.assertNotIn("python3", poll)
+        self.assertNotIn("hyprctl", poll)
 
-    def test_poll_layout_bails_when_closed(self):
-        fn = block_after("function pollLayout()")
-        self.assertRegex(fn, r"if\s*\(\s*!root\.opened\s*\)")
-
-    def test_pending_poll_does_not_restart_when_closed(self):
-        self.assertIn("if (root.opened) Qt.callLater(root.pollLayout)", PANEL)
-
-    def test_no_unconditional_120ms_poll(self):
+    def test_no_120ms_timer(self):
         timers = re.findall(r"Timer\s*\{[^}]+\}", PANEL, flags=re.S)
         for timer in timers:
-            if "interval: 120" not in timer:
-                continue
-            self.assertIn("running: root.opened", timer)
-            self.assertNotRegex(timer, r"running:\s*true")
+            self.assertNotIn("interval: 120", timer)
+
+    def test_geometry_poll_runs_only_while_closed(self):
+        timer = block_after("id: geometryPollTimer")
+        self.assertIn("running: !root.opened", timer)
+        self.assertIn("triggeredOnStart: true", timer)
+        self.assertIn("root.pollGeometry()", timer)
+        self.assertNotIn("running: true", timer)
+
+    def test_geometry_poll_uses_in_process_toplevels(self):
+        self.assertIn("Hyprland.refreshToplevels()", PANEL)
+        fingerprint = block_after("function layoutFingerprint()")
+        self.assertIn("Hyprland.toplevels.values", fingerprint)
+        self.assertIn("lastIpcObject", fingerprint)
+        self.assertIn("ipc.at", fingerprint)
+        self.assertIn("ipc.size", fingerprint)
+
+    def test_geometry_poll_skips_while_overlay_visible(self):
+        fn = block_after("function pollGeometry()")
+        self.assertIn("root.opened", fn)
+        self.assertIn("overlayOnScreen()", fn)
+
+    def test_layout_events_still_schedule_refresh(self):
+        self.assertIn("function isLayoutEvent(name)", PANEL)
+        connections = block_after("function onRawEvent(event)")
+        self.assertIn("root.isLayoutEvent(event.name)", connections)
+        self.assertIn("root.scheduleRefresh()", connections)
+
+    def test_closing_preview_still_recaptures(self):
+        fn = block_after("onOpenedChanged:")
+        self.assertIn("root.scheduleRefresh()", fn)
 
 
 class PanelOverlayCaptureTests(unittest.TestCase):

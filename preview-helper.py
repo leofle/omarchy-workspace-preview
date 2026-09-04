@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import os
+import select
 import stat
 import subprocess
 import sys
+import time
 
 MAX_JPEG_BYTES = 2 * 1024 * 1024
 MAX_JPEG_DIM = 8192
+READ_CHUNK = 64 * 1024
 OVERFLOW_EXIT = 70
 TIMEOUT_EXIT = 124
 
@@ -108,25 +111,60 @@ def cmd_write(path: str) -> None:
         os.close(fd)
 
 
+def reap(proc: subprocess.Popen) -> None:
+    if proc.poll() is None:
+        proc.kill()
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def cmd_run(timeout_ms: int, max_bytes: int, argv: list[str]) -> None:
     if timeout_ms <= 0 or max_bytes <= 0 or not argv:
         fail("invalid run bounds")
+    deadline = time.monotonic() + timeout_ms / 1000
     try:
-        completed = subprocess.run(
-            argv,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=timeout_ms / 1000,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        fail("subprocess deadline exceeded", TIMEOUT_EXIT)
-    output = completed.stdout or b""
-    if len(output) > max_bytes:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        fail("subprocess failed to start")
+    chunks: list[bytes] = []
+    total = 0
+    overflow = False
+    timed_out = False
+    try:
+        fd = proc.stdout.fileno()
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                break
+            if not select.select([fd], [], [], remaining)[0]:
+                timed_out = True
+                break
+            chunk = os.read(fd, READ_CHUNK)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                overflow = True
+                break
+            chunks.append(chunk)
+        if not (overflow or timed_out):
+            try:
+                proc.wait(timeout=max(deadline - time.monotonic(), 0))
+            except subprocess.TimeoutExpired:
+                timed_out = True
+    finally:
+        reap(proc)
+        proc.stdout.close()
+    if overflow:
         fail("subprocess output exceeds ceiling", OVERFLOW_EXIT)
-    if completed.returncode != 0:
-        raise SystemExit(completed.returncode or 1)
-    sys.stdout.buffer.write(output)
+    if timed_out:
+        fail("subprocess deadline exceeded", TIMEOUT_EXIT)
+    if proc.returncode != 0:
+        raise SystemExit(proc.returncode or 1)
+    sys.stdout.buffer.write(b"".join(chunks))
 
 
 def main(argv: list[str]) -> None:

@@ -18,10 +18,8 @@ Panel {
   property bool captureQueued: false
   property int lastFocusId: -1
   property int capturingId: -1
-  property var captureStamps: ({})
   property string shotSource: ""
   property bool pendingRefresh: false
-  property bool layoutPollPending: false
   property string lastLayoutFingerprint: ""
   property int jpegReadId: -1
   property int windowBorderSize: 2
@@ -82,35 +80,33 @@ Panel {
       || name === "configreloaded"
   }
 
-  function layoutFingerprint(clientsText) {
-    var clients
-    try { clients = JSON.parse(clientsText || "[]") } catch (e) { return "" }
-    if (!clients || !clients.length) return "empty"
+  function layoutFingerprint() {
+    var toplevels
+    try { toplevels = Hyprland.toplevels.values } catch (e) { return "" }
+    if (!toplevels || !toplevels.length) return "empty"
     var parts = []
-    for (var i = 0; i < clients.length; i++) {
-      var c = clients[i]
-      if (!c || c.mapped === false || c.hidden === true) continue
-      var ws = c.workspace && c.workspace.id !== undefined ? c.workspace.id : "?"
-      var at = c.at || [0, 0]
-      var size = c.size || [0, 0]
-      parts.push([c.address || "", ws, at[0], at[1], size[0], size[1], c.class || "", c.floating ? 1 : 0, c.fullscreen || 0].join(","))
+    for (var i = 0; i < toplevels.length; i++) {
+      var t = toplevels[i]
+      if (!t) continue
+      var ipc = t.lastIpcObject || {}
+      if (ipc.mapped === false || ipc.hidden === true) continue
+      var ws = t.workspace && t.workspace.id !== undefined ? t.workspace.id : "?"
+      var at = ipc.at || [0, 0]
+      var size = ipc.size || [0, 0]
+      parts.push([t.address || "", ws, at[0], at[1], size[0], size[1], ipc["class"] || "", ipc.floating ? 1 : 0, ipc.fullscreen || 0].join(","))
     }
     parts.sort()
     return parts.join("|")
   }
 
-  function pollLayout() {
-    if (!root.opened) {
-      root.layoutPollPending = false
-      return
+  function pollGeometry() {
+    if (root.opened || root.overlayOnScreen()) return
+    var next = root.layoutFingerprint()
+    if (next && next !== root.lastLayoutFingerprint) {
+      root.lastLayoutFingerprint = next
+      root.scheduleRefresh()
     }
-    if (layoutProc.running) {
-      root.layoutPollPending = true
-      return
-    }
-    layoutProc.running = false
-    layoutProc.command = ["python3", root.helperScript, "run", "1000", "1048576", "--", "hyprctl", "-j", "clients"]
-    layoutProc.running = true
+    Hyprland.refreshToplevels()
   }
 
   function scheduleRefresh() {
@@ -170,13 +166,6 @@ Panel {
     jpegReadProc.running = false
     jpegReadProc.command = ["python3", root.helperScript, "read", Model.previewPath(root.previewDir, workspaceId)]
     jpegReadProc.running = true
-  }
-
-  function markCaptured(id) {
-    var next = {}
-    for (var key in root.captureStamps) next[key] = root.captureStamps[key]
-    next[id] = Date.now()
-    root.captureStamps = next
   }
 
   function openForWorkspace(workspaceId, anchor) {
@@ -253,7 +242,6 @@ Panel {
       root.abortCapture()
       return
     }
-    root.layoutPollPending = false
     root.scheduleRefresh()
   }
 
@@ -271,6 +259,15 @@ Panel {
       if (!root.isLayoutEvent(event.name)) return
       root.scheduleRefresh()
     }
+  }
+
+  Timer {
+    id: geometryPollTimer
+    interval: 400
+    running: !root.opened
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.pollGeometry()
   }
 
   Timer {
@@ -303,15 +300,6 @@ Panel {
       root.capturingId = -1
       root.scheduleRefresh()
     }
-  }
-
-  Timer {
-    id: layoutPollTimer
-    interval: 120
-    running: root.opened
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: root.pollLayout()
   }
 
   Process {
@@ -364,31 +352,6 @@ Panel {
   }
 
   Process {
-    id: layoutProc
-    command: ["python3", "-c", "raise SystemExit(1)"]
-    running: false
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var next = root.layoutFingerprint(text)
-        if (!next || next === root.lastLayoutFingerprint) return
-        root.lastLayoutFingerprint = next
-        root.scheduleRefresh()
-      }
-    }
-    onExited: function(exitCode) {
-      layoutProc.running = false
-      if (exitCode !== 0) {
-        root.layoutPollPending = false
-        return
-      }
-      if (!root.layoutPollPending) return
-      root.layoutPollPending = false
-      if (root.opened) Qt.callLater(root.pollLayout)
-    }
-  }
-
-  Process {
     id: captureProc
     command: ["/bin/sh", "-c", "true"]
     running: false
@@ -401,7 +364,6 @@ Panel {
         if (root.pendingRefresh) Qt.callLater(function() { root.captureWorkspace(root.currentWorkspaceId()) })
         return
       }
-      root.markCaptured(capturedId)
       if (root.selectedWorkspaceId === capturedId && !root.overlayOnScreen())
         root.loadValidatedShot(capturedId)
       if (root.pendingRefresh) Qt.callLater(function() { root.captureWorkspace(root.currentWorkspaceId()) })

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.bubblepaxi.workspace-preview",
   "name": "Workspace Preview",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "bubblepaxi",
   "license": "MIT",
   "description": "Hover a workspace number to preview its thumbnail, and summon the same view from a shortcut.",

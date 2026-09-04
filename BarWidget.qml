@@ -118,11 +118,9 @@ BarWidget {
   onBarChanged: injectPanel()
   Component.onCompleted: root.syncDisplayedIds()
 
-  Timer {
-    interval: 2000
-    running: true
-    repeat: true
-    onTriggered: root.syncDisplayedIds()
+  Connections {
+    target: Hyprland.workspaces
+    function onValuesChanged() { root.syncDisplayedIds() }
   }
 
   Loader {
