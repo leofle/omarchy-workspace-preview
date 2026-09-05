@@ -8,6 +8,7 @@ import select
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 MAX_JPEG_BYTES = 2 * 1024 * 1024
@@ -99,16 +100,16 @@ def cmd_write(path: str) -> None:
     data = validate_jpeg(data)
     directory = os.path.dirname(path) or "."
     os.makedirs(directory, mode=0o700, exist_ok=True)
-    fd = open_regular_nofollow(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+    # Replace the directory entry only after the complete image is available.
+    # mkstemp creates a private file on the same filesystem as the destination.
+    fd, temporary = tempfile.mkstemp(prefix=".preview-", suffix=".jpg", dir=directory)
     try:
-        check_owned_regular(fd)
-        os.fchmod(fd, 0o600)
-        written = 0
-        while written < len(data):
-            written += os.write(fd, data[written:])
-        os.fsync(fd)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+        os.replace(temporary, path)
     finally:
-        os.close(fd)
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def reap(proc: subprocess.Popen) -> None:

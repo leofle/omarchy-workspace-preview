@@ -76,6 +76,7 @@ BarWidget {
     hoveredWorkspaceId = id
     ensurePanel()
     previewCloseTimer.stop()
+    if (panelLoader.item) panelLoader.item.cancelClose()
     if (panelLoader.item && panelLoader.item.opened) {
       panelLoader.item.showWorkspace(id, root)
       return

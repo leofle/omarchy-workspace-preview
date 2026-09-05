@@ -42,6 +42,27 @@ class PreviewHelperTests(unittest.TestCase):
             self.assertEqual(read.returncode, 0, read.stderr)
             self.assertEqual(__import__("base64").b64decode(read.stdout.strip()), data)
 
+    def test_atomic_replacement_preserves_open_reader(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "ws-1.jpg"
+            original, updated = jpeg(16, 16), jpeg(32, 32)
+            path.write_bytes(original)
+            with path.open("rb") as reader:
+                result = run_helper("write", str(path), stdin=updated)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(reader.read(), original)
+            self.assertEqual(path.read_bytes(), updated)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(list(Path(folder).glob(".preview-*")), [])
+
+    def test_invalid_write_preserves_previous_image(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "ws-1.jpg"
+            path.write_bytes(jpeg())
+            result = run_helper("write", str(path), stdin=b"invalid")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(path.read_bytes(), jpeg())
+
     def test_read_rejects_symlink(self):
         data = jpeg()
         with tempfile.TemporaryDirectory() as folder:

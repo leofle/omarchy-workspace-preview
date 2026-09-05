@@ -5,24 +5,35 @@ workspace_id="${1:-}"
 destination="${2:-}"
 helper="$(cd "$(dirname "$0")" && pwd)/preview-helper.py"
 
-if [[ -z "$workspace_id" || -z "$destination" ]]; then
-  echo "usage: $0 <workspace-id> <destination>" >&2
+if [[ ! "$workspace_id" =~ ^[1-9][0-9]*$ || -z "$destination" ]]; then
+  echo "usage: $0 <positive-workspace-id> <destination>" >&2
   exit 2
 fi
 
-mkdir -p -m 700 "$(dirname "$destination")"
+# Snapshot the output identity and geometry. Reject special-workspace overlays.
+monitor_snapshot() {
+  python3 "$helper" run 1000 65536 -- hyprctl -j monitors |
+    jq -ce --argjson workspace "$workspace_id" '
+      [.[] | select(.focused == true and .activeWorkspace.id == $workspace
+        and ((.specialWorkspace.id // 0) == 0))
+        | {name, width, height, scale, transform}] |
+      if length == 1 then .[0] else error("workspace is not focused") end'
+}
 
-monitor_json="$(python3 "$helper" run 1000 65536 -- hyprctl -j monitors)"
-monitor_name="$(
-  printf '%s' "$monitor_json" | jq -r '.[] | select(.focused == true) | .name' | head -n1
-)"
-
-if [[ -z "$monitor_name" || "$monitor_name" == "null" ]]; then
-  exit 1
-fi
+before="$(monitor_snapshot)"
+monitor_name="$(jq -r '.name' <<< "$before")"
+# grim scale is relative to logical output dimensions. Bound the longest edge
+# to 640 pixels (twice the maximum preview width), without upscaling.
+capture_scale="$(jq -er '
+  ([.width, .height] | max) as $edge |
+  if $edge > 0 and .scale > 0 then
+    ([1, 640 / $edge] | min) * .scale
+  else error("invalid monitor geometry") end' <<< "$before")"
 
 tmp_file="$(mktemp --suffix=.jpg)"
 trap 'rm -f "$tmp_file"' EXIT
 
-timeout 3s grim -t jpeg -q 60 -o "$monitor_name" "$tmp_file"
+timeout 3s grim -t jpeg -q 60 -s "$capture_scale" -o "$monitor_name" "$tmp_file"
+after="$(monitor_snapshot)"
+[[ "$before" == "$after" ]] || exit 1
 python3 "$helper" write "$destination" < "$tmp_file"

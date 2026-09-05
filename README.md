@@ -23,7 +23,8 @@ omarchy plugin enable io.github.bubblepaxi.workspace-preview
 
 - Hover a workspace number to open its thumbnail.
 - Click a number or a preview card to focus that workspace.
-- Previews refresh when you leave a workspace or when windows move.
+- Hovering a workspace refreshes the visible desktop’s cached thumbnail. The popup briefly hides during capture to keep itself out of the image.
+- Inactive workspaces show their last captured image; switch to a workspace to refresh its content. Window layout changes also trigger captures.
 
 Summon or hide the panel from a keybinding:
 

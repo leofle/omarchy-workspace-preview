@@ -19,6 +19,7 @@ Panel {
   property int lastFocusId: -1
   property int capturingId: -1
   property string shotSource: ""
+  property bool hoverRefreshing: false
   property bool pendingRefresh: false
   property string lastLayoutFingerprint: ""
   property int jpegReadId: -1
@@ -151,6 +152,29 @@ Panel {
     if (anchor) root.anchorItem = anchor
     root.selectedWorkspaceId = workspaceId
     root.setShot(workspaceId)
+    // Even when hovering an inactive workspace, update the visible desktop's
+    // cache so returning to its number shows current content.
+    root.hoverRefreshing = true
+    windowCaptureTimer.stop()
+    hoverCaptureTimer.restart()
+  }
+
+  function finishHoverRefresh() {
+    if (!root.hoverRefreshing || hoverCaptureTimer.running) return
+    root.hoverRefreshing = false
+    root.setShot(root.selectedWorkspaceId)
+  }
+
+  function captureHoverFrame() {
+    if (!root.opened) {
+      hoverCaptureTimer.stop()
+      root.hoverRefreshing = false
+      return
+    }
+    if (root.overlayOnScreen() || captureProc.running || root.captureQueued) return
+    hoverCaptureTimer.stop()
+    root.captureCurrentWorkspace()
+    if (!root.captureQueued) root.finishHoverRefresh()
   }
 
   function setShot(workspaceId) {
@@ -180,11 +204,22 @@ Panel {
 
   function close() {
     closeTimer.stop()
+    hoverCaptureTimer.stop()
+    root.hoverRefreshing = false
     root.controller.hide()
   }
 
+  function pointerOverPreview() {
+    return panel.containsMouse || (root.hostWidget && root.hostWidget.hoveredWorkspaceId > 0)
+  }
+
+  function previewHoverChanged() {
+    if (panel.containsMouse) root.cancelClose()
+    else if (root.opened && !root.hoverRefreshing) root.scheduleClose()
+  }
+
   function scheduleClose() {
-    if (panel.containsMouse) return
+    if (root.pointerOverPreview()) return
     closeTimer.restart()
   }
 
@@ -239,7 +274,7 @@ Panel {
   onOpenedChanged: {
     if (root.opened) {
       root.refreshWindowBorder()
-      root.abortCapture()
+      if (!root.hoverRefreshing) root.abortCapture()
       return
     }
     root.scheduleRefresh()
@@ -271,11 +306,18 @@ Panel {
   }
 
   Timer {
+    id: hoverCaptureTimer
+    interval: 80
+    repeat: true
+    onTriggered: root.captureHoverFrame()
+  }
+
+  Timer {
     id: closeTimer
     interval: 250
     repeat: false
     onTriggered: {
-      if (panel.containsMouse) return
+      if (root.pointerOverPreview()) return
       root.close()
     }
   }
@@ -292,12 +334,13 @@ Panel {
 
   Timer {
     id: stallTimer
-    interval: 2000
+    interval: 6000
     repeat: false
     onTriggered: {
       captureProc.running = false
       root.captureQueued = false
       root.capturingId = -1
+      root.finishHoverRefresh()
       root.scheduleRefresh()
     }
   }
@@ -360,6 +403,7 @@ Panel {
       stallTimer.stop()
       root.captureQueued = false
       root.capturingId = -1
+      root.finishHoverRefresh()
       if (exitCode !== 0 || capturedId <= 0) {
         if (root.pendingRefresh) Qt.callLater(function() { root.captureWorkspace(root.currentWorkspaceId()) })
         return
@@ -375,8 +419,9 @@ Panel {
     anchorItem: root.anchorItem
     owner: root.hostWidget || root
     bar: root.bar
-    open: root.opened
+    open: root.opened && !root.hoverRefreshing
     triggerMode: "hover"
+    onContainsMouseChanged: root.previewHoverChanged()
     centerOnBar: false
     padding: 0
     margin: 6

@@ -59,10 +59,11 @@ class PanelIdlePollTests(unittest.TestCase):
 
 
 class PanelOverlayCaptureTests(unittest.TestCase):
-    def test_hover_swap_does_not_recapture(self):
+    def test_hover_swap_queues_fresh_capture(self):
         fn = block_after("function showWorkspace(")
         self.assertIn("root.setShot(workspaceId)", fn)
-        self.assertNotIn("captureWorkspace", fn)
+        self.assertIn("root.hoverRefreshing = true", fn)
+        self.assertIn("hoverCaptureTimer.restart()", fn)
 
     def test_capture_skips_while_overlay_is_on_screen(self):
         fn = block_after("function captureWorkspace(")
