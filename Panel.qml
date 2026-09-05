@@ -19,6 +19,7 @@ Panel {
   property int lastFocusId: -1
   property int capturingId: -1
   property string shotSource: ""
+  property int snapshotRevision: 0
   property bool hoverRefreshing: false
   property bool pendingRefresh: false
   property string lastLayoutFingerprint: ""
@@ -152,8 +153,13 @@ Panel {
     if (anchor) root.anchorItem = anchor
     root.selectedWorkspaceId = workspaceId
     root.setShot(workspaceId)
-    // Even when hovering an inactive workspace, update the visible desktop's
-    // cache so returning to its number shows current content.
+    root.snapshotRevision += 1
+    if (workspaceId !== root.focusId) {
+      hoverCaptureTimer.stop()
+      root.hoverRefreshing = false
+      return
+    }
+    // Monitor capture is needed only for the visible workspace.
     root.hoverRefreshing = true
     windowCaptureTimer.stop()
     hoverCaptureTimer.restart()
@@ -437,6 +443,18 @@ Panel {
         anchors.fill: parent
         anchors.margins: root.frameWidth
         color: Color.background
+
+        Loader {
+          anchors.fill: parent
+          active: root.opened && root.selectedWorkspaceId !== root.focusId
+            && root.workspaceOccupied(root.selectedWorkspaceId)
+          sourceComponent: WorkspaceSnapshot {
+            workspaceId: root.selectedWorkspaceId
+            revision: root.snapshotRevision
+            wallpaper: root.wallpaperUrl
+          }
+          z: 1
+        }
 
         Image {
           id: shot

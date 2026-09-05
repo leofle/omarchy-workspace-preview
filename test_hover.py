@@ -26,7 +26,7 @@ const shots = [];
 let captures = 0;
 const root = {
   opened: true, hoverRefreshing: false, captureQueued: false,
-  selectedWorkspaceId: 1, visible: true,
+  selectedWorkspaceId: 1, focusId: 1, snapshotRevision: 0, visible: true,
   setShot(id) { shots.push(id); },
   overlayOnScreen() { return this.visible; },
   captureCurrentWorkspace() { captures++; this.captureQueued = true; }
@@ -60,6 +60,9 @@ root.finishHoverRefresh();
 assert.equal(root.hoverRefreshing, false);
 assert.equal(shots.at(-1), 1, 'display most recently selected workspace');
 root.showWorkspace(2, null);
+assert.equal(root.hoverRefreshing, false, 'inactive snapshot must not hide popup');
+assert.equal(hoverCaptureTimer.running, false, 'inactive snapshot must not capture current monitor');
+root.showWorkspace(1, null);
 root.opened = false;
 root.captureHoverFrame();
 assert.equal(hoverCaptureTimer.running, false);
